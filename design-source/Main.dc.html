@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home – no devices</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#0F2A5C;background:#F4F7FB}
+a{color:#1553B8}a:hover{color:#0F3F8F}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #F4F7FB; display: flex; flex-direction: column; overflow: hidden">
+<header style="padding: 64px 24px 0; display: flex; align-items: center; justify-content: space-between">
+<h1 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: -0.5px">Home</h1>
+</header>
+<main style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 32px; gap: 28px; text-align: center">
+<div style="width: 168px; height: 168px; border-radius: 84px; background: #E3EDFB; display: flex; align-items: center; justify-content: center; color: #1553B8">
+<svg width="84" height="84" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 8s-11 12-11 20a11 11 0 0 0 22 0c0-8-11-20-11-20z"></path><path d="M18 29a6 6 0 0 0 6 6"></path></svg>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 26px; font-weight: 700">No purifier added yet</h2>
+<p style="margin: 0; font-size: 16px; line-height: 24px; color: #56627A">Add your RO purifier to see water TDS and temperature live. Keep it powered on and within 2 m of your phone.</p>
+</div>
+<a href="Permissions.dc.html" style="width: 100%; height: 56px; border-radius: 16px; background: #1553B8; color: #FFFFFF; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 17px; font-weight: 600; text-decoration: none">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+Add device
+</a>
+<a href="#how" style="font-size: 15px; font-weight: 500">How setup works</a>
+</main>
+<nav style="display: flex; gap: 8px; border-top: 1px solid #D5DEEB; background: #FFFFFF; padding: 8px 24px 28px">
+<a href="Main.dc.html" style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; color: #1553B8; font-size: 12px; font-weight: 600; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path></svg>Devices</a>
+<a href="Profile.dc.html" style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; color: #56627A; font-size: 12px; font-weight: 500; text-decoration: none"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>Profile</a>
+</nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
