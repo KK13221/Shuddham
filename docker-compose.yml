@@ -1,0 +1,26 @@
+# Local development stack: MongoDB + backend (API :4000, MQTT :1883).
+# Run: docker compose up --build
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/shuddham
+    ports:
+      - "4000:4000"
+      - "1883:1883"
+
+volumes:
+  mongo-data:
