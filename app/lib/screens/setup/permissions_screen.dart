@@ -52,7 +52,7 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
       ),
       body: ScreenBody(
         bottom: _openSettings
-            ? FilledButton(onPressed: openAppSettings, child: const Text('Open Settings'))
+            ? const FilledButton(onPressed: openAppSettings, child: Text('Open Settings'))
             : BusyButton(label: 'Continue', busy: _busy, onPressed: _continue),
         children: [
           Container(
