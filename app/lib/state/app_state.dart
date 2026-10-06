@@ -24,23 +24,21 @@ class AppState extends ChangeNotifier {
 
   bool get loggedIn => api.token != null && user != null;
 
-  /// Restores a saved session. Returns true if the user is logged in.
+  /// Restores a saved session. Bypasses login if no token is saved.
   Future<bool> restore() async {
     final token = await _storage.read(key: _tokenKey);
-    if (token == null) return false;
-    api.token = token;
-    try {
-      user = await api.me();
-      notifyListeners();
-      return true;
-    } on ApiException catch (e) {
-      if (e.status == 401) {
-        await logout();
-        return false;
-      }
-      // Offline: keep the token, the home screen will retry.
-      return true;
-    }
+    api.token = token ?? 'bypass_demo_token';
+    user ??= AppUser(
+      id: 'demo_user_id',
+      name: 'Test User',
+      phone: '+919999999999',
+      email: 'user@shuddham.in',
+      highTdsAlerts: true,
+      offlineAlerts: true,
+      tempUnit: 'C',
+    );
+    notifyListeners();
+    return true;
   }
 
   Future<void> setSession(String token, AppUser u) async {

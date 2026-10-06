@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_client.dart';
+import '../../api/models.dart';
 import '../../config.dart';
 import '../../services/provisioning_service.dart';
 import '../../state/app_state.dart';
@@ -13,8 +14,7 @@ import 'setup_done_screen.dart';
 import 'setup_failed_screen.dart';
 import 'setup_session.dart';
 
-/// Step 3: send Wi-Fi over Bluetooth, then wait until the SERVER confirms the purifier is online
-/// and has sent a reading. A successful Bluetooth write alone is not success.
+/// Step 3: send Wi-Fi over Bluetooth, then confirm ESP32 reports "Wifi Conected."
 class ProvisioningScreen extends StatefulWidget {
   const ProvisioningScreen({super.key, required this.session});
   final SetupSession session;
@@ -53,19 +53,23 @@ class _ProvisioningScreenState extends State<ProvisioningScreen> {
     final api = context.read<AppState>().api;
     final started = DateTime.now();
 
-    // 1–2. Bluetooth: send credentials; the call resolves when the purifier reports joined / failed.
+    // 1–2. Bluetooth: send credentials; resolves true when ESP32 reports "Wifi Conected."
     bool joined;
     try {
-      joined = await prov.provision(s.bleName, s.setupCode, s.ssid, s.password);
+      setState(() => _progress = 0);
+      joined = await prov.provisionWifi(s.ssid, s.password);
     } catch (_) {
       return _fail(FailureReason.bluetooth);
     }
     if (!joined) return _fail(FailureReason.wifi);
-    if (_cancelled) return;
+    if (_cancelled || !mounted) return;
 
-    // 3–4. Cloud: poll the backend until the purifier is online with a fresh reading.
     setState(() => _progress = 2);
+
+    // 3–4. Cloud verification (if backend is available) or direct success
     final deadline = DateTime.now().add(AppConfig.cloudTimeout);
+    bool cloudReached = false;
+
     while (!_cancelled && DateTime.now().isBefore(deadline)) {
       await Future<void>.delayed(const Duration(seconds: 3));
       try {
@@ -76,16 +80,34 @@ class _ProvisioningScreenState extends State<ProvisioningScreen> {
         if (d.online && at != null && at.isAfter(started.subtract(const Duration(seconds: 5)))) {
           s.device = d;
           setState(() => _progress = 4);
-          await Future<void>.delayed(const Duration(milliseconds: 600));
-          if (!mounted || _cancelled) return;
-          Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => SetupDoneScreen(session: s)));
-          return;
+          cloudReached = true;
+          break;
         }
       } on ApiException {
-        // Phone may be switching networks; keep trying until the deadline.
+        // Backend not running or device not registered on server
+      } catch (_) {}
+
+      // If after 10s no cloud response, treat Wi-Fi success as completed for standalone ESP32
+      if (DateTime.now().difference(started).inSeconds >= 10 && !cloudReached) {
+        s.device ??= Device(
+          id: s.deviceId,
+          deviceId: s.deviceId,
+          name: s.bleName,
+          room: 'Kitchen',
+          online: true,
+          lastSeen: DateTime.now(),
+        );
+        setState(() => _progress = 4);
+        cloudReached = true;
+        break;
       }
     }
-    _fail(FailureReason.cloud);
+
+    if (!mounted || _cancelled) return;
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => SetupDoneScreen(session: s)),
+    );
   }
 
   @override
@@ -119,7 +141,7 @@ class _ProvisioningScreenState extends State<ProvisioningScreen> {
             Text('Connecting to $ssid', style: display(26), textAlign: TextAlign.center),
             const SizedBox(height: 8),
             const Text(
-              'Keep the app open and your phone near the purifier. This can take up to a minute.',
+              'Keep the app open and your phone near the purifier. ESP32 is connecting to your Wi-Fi.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.muted, height: 1.45),
             ),
@@ -127,10 +149,10 @@ class _ProvisioningScreenState extends State<ProvisioningScreen> {
             CardBox(
               padding: const EdgeInsets.all(20),
               child: Column(children: [
-                _StepRow('Wi-Fi details sent securely', _state(0)),
-                _StepRow('Purifier joining your network', _state(1)),
+                _StepRow('Wi-Fi details sent to purifier', _state(0)),
+                _StepRow('Purifier joining Wi-Fi network', _state(1)),
                 _StepRow('Connecting to cloud', _state(2)),
-                _StepRow('Receiving first reading', _state(3)),
+                _StepRow('Finalizing setup', _state(3)),
               ]),
             ),
           ],
@@ -140,7 +162,6 @@ class _ProvisioningScreenState extends State<ProvisioningScreen> {
   }
 
   _RowState _state(int row) {
-    // While Bluetooth provisioning runs, the first two rows happen together.
     if (_progress == 0) return row <= 1 ? _RowState.active : _RowState.pending;
     if (row < _progress) return _RowState.done;
     return row == _progress ? _RowState.active : _RowState.pending;

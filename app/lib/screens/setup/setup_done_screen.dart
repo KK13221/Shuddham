@@ -65,7 +65,7 @@ class _SetupDoneScreenState extends State<SetupDoneScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final r = widget.session.device.lastReading;
+    final r = widget.session.device?.lastReading;
     final rooms = {..._rooms, _room}.toList();
     return PopScope(
       canPop: false,

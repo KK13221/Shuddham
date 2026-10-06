@@ -19,6 +19,20 @@ class _PermissionsScreenState extends State<PermissionsScreen> {
   String? _error;
   bool _openSettings = false;
 
+  @override
+  void initState() {
+    super.initState();
+    _checkInitial();
+  }
+
+  Future<void> _checkInitial() async {
+    final prov = context.read<ProvisioningService>();
+    final alreadyGranted = await prov.hasPermissions();
+    if (alreadyGranted && mounted) {
+      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const ScanScreen()));
+    }
+  }
+
   Future<void> _continue() async {
     setState(() {
       _busy = true;

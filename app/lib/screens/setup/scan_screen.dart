@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../../api/api_client.dart';
 import '../../services/provisioning_service.dart';
-import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
 import 'setup_session.dart';
 import 'wifi_screen.dart';
 
-/// Step 1: find purifiers in setup mode, pick one, enter the setup code from its label.
+/// Step 1: Scan for nearby ESP32 Shuddham devices.
+/// - Auto-connects if exactly 1 Shuddham purifier is discovered.
+/// - Shows device selection list if multiple purifiers are in range.
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
 
@@ -19,9 +18,11 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
-  List<String> _found = [];
-  String? _selected;
+  List<DiscoveredBleDevice> _found = [];
+  DiscoveredBleDevice? _selected;
   bool _scanning = false;
+  bool _connecting = false;
+  String? _statusText;
   String? _error;
 
   @override
@@ -33,33 +34,87 @@ class _ScanScreenState extends State<ScanScreen> {
   Future<void> _scan() async {
     setState(() {
       _scanning = true;
+      _statusText = 'Scanning for nearby Shuddham purifiers...';
       _error = null;
     });
+
     try {
-      final found = await context.read<ProvisioningService>().scanDevices();
+      final prov = context.read<ProvisioningService>();
+      final found = await prov.scanDevices();
       if (!mounted) return;
+
+      final shuddhamList = found.where((d) {
+        final u = d.name.toUpperCase();
+        return u.startsWith('SHUDDHAM') || u.startsWith('SHD');
+      }).toList();
+
       setState(() {
         _found = found;
-        if (!found.contains(_selected)) _selected = found.length == 1 ? found.first : null;
       });
+
+      // Auto-connect if exactly 1 Shuddham device is in range
+      if (shuddhamList.length == 1) {
+        final target = shuddhamList.first;
+        setState(() {
+          _selected = target;
+          _statusText = 'Found ${target.name}! Connecting automatically...';
+        });
+        await _connectDevice(target);
+      } else if (shuddhamList.length > 1) {
+        setState(() {
+          _selected = shuddhamList.first;
+          _statusText = '${shuddhamList.length} Shuddham devices found. Select one to connect.';
+        });
+      } else if (found.isNotEmpty) {
+        setState(() {
+          _selected = found.first;
+          _statusText = '${found.length} BLE device(s) found.';
+        });
+      } else {
+        setState(() {
+          _statusText = 'No purifier found.';
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() => _error = 'Couldn’t scan for purifiers. Make sure Bluetooth is on and try again.');
+      if (mounted) {
+        setState(() => _error = 'Scan failed: Make sure Bluetooth is ON and allowed in Settings.');
+      }
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
   }
 
-  Future<void> _connect() async {
-    final name = _selected;
-    if (name == null) return;
-    final session = await showModalBottomSheet<SetupSession>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _SetupCodeSheet(bleName: name),
-    );
-    if (session != null && mounted) {
-      Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => WifiScreen(session: session)));
+  Future<void> _connectDevice(DiscoveredBleDevice dev) async {
+    if (_connecting) return;
+    setState(() {
+      _selected = dev;
+      _connecting = true;
+      _statusText = 'Connecting to ${dev.name} (MTU 64 & Services)...';
+      _error = null;
+    });
+
+    try {
+      final prov = context.read<ProvisioningService>();
+      await prov.connect(dev.device);
+      if (!mounted) return;
+
+      final session = SetupSession(
+        bleName: dev.name,
+        deviceId: dev.name.toUpperCase(),
+      );
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => WifiScreen(session: session)),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to connect to ${dev.name}: $e';
+          _statusText = null;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _connecting = false);
     }
   }
 
@@ -68,43 +123,122 @@ class _ScanScreenState extends State<ScanScreen> {
     return Scaffold(
       appBar: AppBar(title: const StepBar(step: 1)),
       body: ScreenBody(
-        bottom: FilledButton(
-          onPressed: _selected == null ? null : _connect,
-          child: Text(_selected == null ? 'Select a purifier' : 'Connect to ${ProvisioningService.shortId(_selected!)}'),
+        bottom: BusyButton(
+          busy: _connecting,
+          label: _connecting
+              ? 'Connecting to ${_selected?.name ?? 'Purifier'}...'
+              : (_selected == null
+                  ? 'Select a purifier'
+                  : 'Connect to ${ProvisioningService.shortId(_selected!.name)}'),
+          onPressed: _selected == null || _connecting ? null : () => _connectDevice(_selected!),
         ),
         children: [
-          const Heading('Choose your purifier'),
-          const SizedBox(height: 8),
-          Row(children: [
-            if (_scanning) ...[
-              const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2.5)),
-              const SizedBox(width: 8),
-              const Text('Searching…', style: TextStyle(color: AppColors.muted, fontSize: 15)),
-            ] else ...[
-              Text('${_found.length} found', style: const TextStyle(color: AppColors.muted, fontSize: 15)),
-              const Spacer(),
-              TextButton.icon(onPressed: _scan, icon: const Icon(Icons.refresh, size: 18), label: const Text('Scan again')),
-            ],
-          ]),
+          const Heading(
+            'Connect Purifier',
+            subtitle: 'Searching for nearby ESP32 Shuddham devices broadcasting in setup mode.',
+          ),
           const SizedBox(height: 12),
+          if (_statusText != null && !_connecting)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.tint,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  if (_scanning) ...[
+                    const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                    const SizedBox(width: 10),
+                  ] else ...[
+                    const Icon(Icons.check_circle_outline, color: AppColors.primary, size: 18),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: Text(
+                      _statusText!,
+                      style: const TextStyle(fontSize: 13, color: AppColors.navy, fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (_connecting) ...[
+            const SizedBox(height: 24),
+            Center(
+              child: Column(
+                children: [
+                  const CircularProgressIndicator(strokeWidth: 4),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Connecting to ${_selected?.name ?? 'Purifier'}...',
+                    style: display(18),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Negotiating MTU 64 and subscribing to notifications...',
+                    style: TextStyle(fontSize: 13, color: AppColors.muted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+          const SizedBox(height: 12),
+          Row(children: [
+            Text('${_found.length} device(s) in range', style: const TextStyle(color: AppColors.muted, fontSize: 14)),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _connecting ? null : _scan,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Scan again'),
+            ),
+          ]),
+          const SizedBox(height: 8),
           if (_error != null) ...[ErrorBanner(_error!), const SizedBox(height: 12)],
-          for (final name in _found) ...[
+          for (final dev in _found) ...[
             _DeviceOption(
-              name: name,
-              selected: name == _selected,
-              onTap: () => setState(() => _selected = name),
+              dev: dev,
+              selected: _selected?.device.remoteId == dev.device.remoteId,
+              isConnecting: _connecting && _selected?.device.remoteId == dev.device.remoteId,
+              onTap: _connecting ? () {} : () => _connectDevice(dev),
             ),
             const SizedBox(height: 12),
           ],
           if (!_scanning && _found.isEmpty && _error == null)
-            const CardBox(
-              child: Text('No purifier found yet.', style: TextStyle(fontWeight: FontWeight.w600)),
+            CardBox(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Text('No purifier found yet.', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+                  SizedBox(height: 6),
+                  Text(
+                    'Hold the BOOT button on the ESP32 device for 6 seconds, then release it to enter Bluetooth pairing mode.',
+                    style: TextStyle(color: AppColors.muted, fontSize: 14, height: 1.4),
+                  ),
+                ],
+              ),
             ),
-          const SizedBox(height: 4),
-          const Text(
-            'Several purifiers nearby? Match the last 4 characters with the ID on the purifier’s label. '
-            'Don’t see yours? Hold its Wi-Fi button for 5 s until the light pulses blue, then scan again.',
-            style: TextStyle(fontSize: 14, height: 1.45, color: AppColors.muted),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.bg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Icon(Icons.touch_app_outlined, color: AppColors.primary, size: 20),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Tip: If only 1 Shuddham purifier is found, it will automatically connect and open the Wi-Fi setup.',
+                    style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.35),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -113,13 +247,22 @@ class _ScanScreenState extends State<ScanScreen> {
 }
 
 class _DeviceOption extends StatelessWidget {
-  const _DeviceOption({required this.name, required this.selected, required this.onTap});
-  final String name;
+  const _DeviceOption({
+    required this.dev,
+    required this.selected,
+    required this.isConnecting,
+    required this.onTap,
+  });
+
+  final DiscoveredBleDevice dev;
   final bool selected;
+  final bool isConnecting;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final isShuddham = dev.name.toUpperCase().startsWith('SHUDDHAM') || dev.name.toUpperCase().startsWith('SHD');
+
     return Semantics(
       selected: selected,
       button: true,
@@ -127,7 +270,10 @@ class _DeviceOption extends StatelessWidget {
         color: Colors.white,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: selected ? AppColors.primary : AppColors.border, width: selected ? 2 : 1),
+          side: BorderSide(
+            color: selected ? AppColors.primary : AppColors.border,
+            width: selected ? 2 : 1,
+          ),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
@@ -138,99 +284,62 @@ class _DeviceOption extends StatelessWidget {
               Container(
                 width: 48,
                 height: 48,
-                decoration: BoxDecoration(color: selected ? AppColors.tint : AppColors.bg, borderRadius: BorderRadius.circular(14)),
-                child: Icon(Icons.water_drop_outlined, color: selected ? AppColors.primary : AppColors.navy),
+                decoration: BoxDecoration(
+                  color: isShuddham ? AppColors.tint : AppColors.bg,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  isShuddham ? Icons.water_drop : Icons.bluetooth_connected,
+                  color: isShuddham ? AppColors.primary : AppColors.navy,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Text('RO Purifier', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          dev.name,
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isShuddham) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text('PURIFIER', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 3),
-                  Text('ID ${ProvisioningService.shortId(name)}',
-                      style: const TextStyle(fontSize: 13, color: AppColors.muted, fontFamily: 'monospace')),
+                  Text(
+                    'Signal: ${dev.rssi} dBm • ${dev.device.remoteId}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ]),
               ),
-              if (selected) const Icon(Icons.check_circle, color: AppColors.primary),
+              if (isConnecting)
+                const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5))
+              else
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    minimumSize: Size.zero,
+                  ),
+                  onPressed: onTap,
+                  child: const Text('Connect', style: TextStyle(fontSize: 13)),
+                ),
             ]),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Asks for the 8-digit setup code and links the purifier to this account.
-class _SetupCodeSheet extends StatefulWidget {
-  const _SetupCodeSheet({required this.bleName});
-  final String bleName;
-
-  @override
-  State<_SetupCodeSheet> createState() => _SetupCodeSheetState();
-}
-
-class _SetupCodeSheetState extends State<_SetupCodeSheet> {
-  final _code = TextEditingController();
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _code.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final code = _code.text.trim();
-    if (code.length != 8) {
-      setState(() => _error = 'Enter the 8-digit code from the label');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    final deviceId = ProvisioningService.deviceIdFromBleName(widget.bleName);
-    try {
-      final device = await context.read<AppState>().api.claim(deviceId, code);
-      if (!mounted) return;
-      Navigator.of(context).pop(SetupSession(bleName: widget.bleName, deviceId: deviceId, setupCode: code, device: device));
-    } on ApiException catch (e) {
-      setState(() => _error = e.message);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(24, 0, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Enter setup code', style: display(24)),
-          const SizedBox(height: 8),
-          Text(
-            'Find the 8-digit code on the label of purifier ${ProvisioningService.shortId(widget.bleName)}. '
-            'It proves the purifier is yours.',
-            style: const TextStyle(color: AppColors.muted, height: 1.45),
-          ),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _code,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(8)],
-            textAlign: TextAlign.center,
-            style: display(26).copyWith(letterSpacing: 6),
-            decoration: const InputDecoration(hintText: '00000000'),
-            onSubmitted: (_) => _submit(),
-          ),
-          if (_error != null) ...[const SizedBox(height: 12), ErrorBanner(_error!)],
-          const SizedBox(height: 20),
-          BusyButton(label: 'Continue', busy: _busy, onPressed: _submit),
-        ],
       ),
     );
   }

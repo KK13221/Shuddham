@@ -73,10 +73,8 @@ class _DevicesTabState extends State<DevicesTab> with WidgetsBindingObserver {
     Widget body;
     if (!state.devicesLoaded) {
       body = const Center(child: CircularProgressIndicator());
-    } else if (devices.isEmpty && state.devicesError != null) {
-      body = _ErrorState(message: state.devicesError!, onRetry: _refresh);
     } else if (devices.isEmpty) {
-      body = _EmptyState(onAdd: _addDevice);
+      body = _EmptyState(onAdd: _addDevice, error: state.devicesError);
     } else {
       body = RefreshIndicator(
         onRefresh: _refresh,
@@ -340,31 +338,48 @@ class _DeviceRow extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.onAdd});
+  const _EmptyState({required this.onAdd, this.error});
   final VoidCallback onAdd;
+  final String? error;
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 168,
-              height: 168,
+              width: 140,
+              height: 140,
               decoration: const BoxDecoration(color: AppColors.tint, shape: BoxShape.circle),
-              child: const Icon(Icons.water_drop_outlined, size: 84, color: AppColors.primary),
+              child: const Icon(Icons.bluetooth_searching, size: 70, color: AppColors.primary),
             ),
-            const SizedBox(height: 28),
-            Text('No purifier added yet', style: display(26), textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            Text('Connect Your Purifier', style: display(26), textAlign: TextAlign.center),
             const SizedBox(height: 10),
             const Text(
-              'Add your RO purifier to see water TDS and temperature live. Keep it powered on and within 2 m of your phone.',
+              'Pair with your ESP32 TDS Monitor over Bluetooth to configure Wi-Fi and view live TDS metrics.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, height: 1.5, color: AppColors.muted),
+              style: TextStyle(fontSize: 15, height: 1.45, color: AppColors.muted),
             ),
-            const SizedBox(height: 28),
-            FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: const Text('Add device')),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.bluetooth),
+                label: const Text('Setup Purifier over Bluetooth', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            if (error != null) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Note: Standalone mode (Server not connected). You can still pair and configure ESP32 directly via Bluetooth.',
+                style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                textAlign: TextAlign.center,
+              ),
+            ],
           ],
         ),
       );
