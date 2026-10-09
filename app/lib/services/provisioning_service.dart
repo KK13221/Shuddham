@@ -197,14 +197,14 @@ class ProvisioningService {
     }
 
     // Settle connection before requesting MTU
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(milliseconds: 600));
 
     // Request MTU 64 as specified in the firmware spec
     if (Platform.isAndroid) {
       try {
         debugPrint('[BLE] 2. Requesting MTU 64...');
-        await device.requestMtu(64).timeout(const Duration(seconds: 3));
-        await Future.delayed(const Duration(milliseconds: 500));
+        await device.requestMtu(64).timeout(const Duration(seconds: 10));
+        await Future.delayed(const Duration(milliseconds: 600));
       } catch (e) {
         debugPrint('[BLE] MTU request error (continuing): $e');
       }
@@ -212,7 +212,7 @@ class ProvisioningService {
 
     debugPrint('[BLE] 3. Discovering services...');
     final services = await device.discoverServices();
-    await Future.delayed(const Duration(milliseconds: 500));
+    await Future.delayed(const Duration(milliseconds: 600));
 
     BluetoothCharacteristic? targetChar;
 
@@ -272,14 +272,14 @@ class ProvisioningService {
     if (_commChar!.properties.notify || _commChar!.properties.indicate) {
       debugPrint('[BLE] 4. Enabling notifications on characteristic...');
       try {
-        await _commChar!.setNotifyValue(true, timeout: 3);
+        await _commChar!.setNotifyValue(true, timeout: 15);
         debugPrint('[BLE] Notifications listener registered.');
       } catch (e) {
         debugPrint('[BLE] setNotifyValue notice: $e');
       }
     }
 
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(const Duration(milliseconds: 600));
     debugPrint('[BLE] 5. Connected and ready for commands.');
   }
 

@@ -6,6 +6,7 @@ import '../../api/api_client.dart';
 import '../../state/app_state.dart';
 import '../../theme.dart';
 import '../../widgets/common.dart';
+import '../home/home_shell.dart';
 import 'login_email_screen.dart';
 import 'otp_screen.dart';
 import 'signup_screen.dart';
@@ -49,11 +50,18 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _skip() {
+    context.read<AppState>().skipLogin();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const HomeShell()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: ScreenBody(
-        padding: const EdgeInsets.fromLTRB(24, 48, 24, 24),
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
         bottom: Column(
           children: [
             Wrap(
@@ -75,6 +83,37 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
         children: [
+          Align(
+            alignment: Alignment.topRight,
+            child: TextButton(
+              onPressed: _skip,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.navy,
+                backgroundColor: AppColors.tint,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: const BorderSide(color: AppColors.border),
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Skip',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.navy,
+                    ),
+                  ),
+                  SizedBox(width: 4),
+                  Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppColors.navy),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Center(child: Image.asset('assets/images/logo_mark.png', width: 84, height: 85)),
           const SizedBox(height: 12),
           Center(child: Image.asset('assets/images/logo_wordmark.png', width: 200, semanticLabel: 'Shuddham Water Solutions')),

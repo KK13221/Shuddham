@@ -41,6 +41,21 @@ class AppState extends ChangeNotifier {
     return true;
   }
 
+  /// Sets demo guest credentials when user skips login.
+  void skipLogin() {
+    api.token ??= 'bypass_demo_token';
+    user ??= AppUser(
+      id: 'demo_user_id',
+      name: 'Guest User',
+      phone: '+919999999999',
+      email: 'guest@shuddham.in',
+      highTdsAlerts: true,
+      offlineAlerts: true,
+      tempUnit: 'C',
+    );
+    notifyListeners();
+  }
+
   Future<void> setSession(String token, AppUser u) async {
     api.token = token;
     user = u;

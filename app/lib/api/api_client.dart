@@ -44,8 +44,12 @@ class ApiClient {
       res = await http.Response.fromStream(await _http.send(req).timeout(const Duration(seconds: 20)));
     } on SocketException {
       throw ApiException(0, 'NETWORK', 'No internet connection. Check your network and try again.');
+    } on http.ClientException catch (e) {
+      throw ApiException(0, 'NETWORK', 'Could not reach server: ${e.message}');
     } on TimeoutException {
       throw ApiException(0, 'TIMEOUT', 'The server took too long to respond. Try again.');
+    } catch (e) {
+      throw ApiException(0, 'NETWORK', 'Network error: $e');
     }
 
     Map<String, dynamic> data = const {};
